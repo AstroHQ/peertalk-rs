@@ -10,8 +10,11 @@ use std::mem::size_of;
 /// Error type for any errors with talking to USB muxer/device support
 #[derive(Debug)]
 pub enum ProtocolError {
+    /// Message type is invalid, or unsupported
     InvalidMessageType(String),
+    /// Plist entry isn't the type expected
     InvalidPlistEntry,
+    /// Plist entry for key is invalid/wrong type
     InvalidPlistEntryForKey(&'static str),
     /// Invalid packet type value
     InvalidPacketType(u32),
@@ -42,9 +45,9 @@ impl Error for ProtocolError {
 pub type Result<T> = ::std::result::Result<T, ProtocolError>;
 
 const BASE_PACKET_SIZE: u32 = size_of::<u32>() as u32 * 4;
-// const USB_MESSAGE_TYPE_KEY: &str = "MessageType";
-// const USB_DEVICE_ID_KEY: &str = "DeviceID";
-// const USB_DEVICE_PROPERTIES_KEY: &str = "Properties";
+const USB_MESSAGE_TYPE_KEY: &str = "MessageType";
+const USB_DEVICE_ID_KEY: &str = "DeviceID";
+const USB_DEVICE_PROPERTIES_KEY: &str = "Properties";
 
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -224,58 +227,97 @@ impl TryFrom<&Value> for MessageType {
         }
     }
 }
-/*
-<key>ConnectionType</key>
-<string>USB</string>
-<key>DeviceID</key>
-<integer>3</integer>
-<key>LocationID</key>
-<integer>0</integer>
-<key>ProductID</key>
-<integer>4779</integer>
-<key>SerialNumber</key>
-<string>00008027-000C486C0222002E</string>*/
-#[derive(Debug)]
-pub struct DeviceProperties {
-    pub connection_type: String,
-    pub device_id: u64,
-    pub location_id: u64,
-    pub product_id: u64,
-    pub serial_number: String,
+
+/// Device ID type, currently u64 to hold max value stored in plist
+pub type DeviceId = u64;
+/// Product type of connected device, which typically is an iPad, iPhone, or iPod touch
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ProductType {
+    /// Any iPhone that's connected
+    IPhone,
+    /// iPod touch
+    IPodTouch,
+    /// iPad/iPad Pro
+    IPad,
+    /// Unexpected product id we haven't coded for yet
+    Unknown(u16),
 }
-impl TryFrom<&Value> for DeviceProperties {
+impl From<u16> for ProductType {
+    fn from(product_id: u16) -> Self {
+        match product_id {
+            0x12A8 => ProductType::IPhone,
+            0x12AA => ProductType::IPodTouch,
+            0x12AB => ProductType::IPad,
+            p => ProductType::Unknown(p),
+        }
+    }
+}
+/// How device is connected
+#[derive(Debug, PartialEq)]
+pub enum DeviceConnectionType {
+    /// USB connection type
+    USB,
+    /// Wi-fi maybe? have yet to see it
+    Unknown(String),
+}
+impl TryFrom<&Value> for DeviceConnectionType {
+    type Error = ProtocolError;
+    fn try_from(value: &Value) -> Result<Self> {
+        match value.as_string() {
+            Some("USB") => Ok(DeviceConnectionType::USB),
+            Some(s) => Ok(DeviceConnectionType::Unknown(s.to_owned())),
+            None => Err(ProtocolError::InvalidPlistEntryForKey("ConnectionType")),
+        }
+    }
+}
+/// Info about an attached device
+#[derive(Debug)]
+pub struct DeviceAttachedInfo {
+    /// Type of connection device is using (USB or otherwise)
+    pub connection_type: DeviceConnectionType,
+    /// ID of device
+    pub device_id: DeviceId,
+    /// Unknown purpose/value
+    pub location_id: u64,
+    /// Product type of device, ipad, ipod, iphone, mysterious other device
+    pub product_type: ProductType,
+    /// Device's identifier/serial
+    pub identifier: String,
+}
+// TODO: this likely could be done from within serde maybe? custom deserialization?
+impl TryFrom<&Value> for DeviceAttachedInfo {
     type Error = ProtocolError;
     fn try_from(value: &Value) -> Result<Self> {
         match value {
             Value::Dictionary(d) => {
                 let connection_type = d
                     .get("ConnectionType")
-                    .and_then(Value::as_string)
-                    .ok_or(ProtocolError::InvalidPlistEntryForKey("ConnectionType"))?
-                    .to_owned();
+                    .and_then(|t| DeviceConnectionType::try_from(t).ok())
+                    .ok_or(ProtocolError::InvalidPlistEntryForKey("ConnectionType"))?;
                 let device_id = d
-                    .get("DeviceID")
+                    .get(USB_DEVICE_ID_KEY)
                     .and_then(Value::as_unsigned_integer)
-                    .ok_or(ProtocolError::InvalidPlistEntryForKey("DeviceID"))?;
+                    .ok_or(ProtocolError::InvalidPlistEntryForKey(USB_DEVICE_ID_KEY))?;
                 let location_id = d
                     .get("LocationID")
                     .and_then(Value::as_unsigned_integer)
                     .ok_or(ProtocolError::InvalidPlistEntryForKey("LocationID"))?;
-                let product_id = d
+                let product_type = d
                     .get("ProductID")
                     .and_then(Value::as_unsigned_integer)
+                    .and_then(|i| Some(ProductType::from(i as u16))) // product_id is USB product_id which is u16
                     .ok_or(ProtocolError::InvalidPlistEntryForKey("ProductID"))?;
-                let serial_number = d
+                let identifier = d
                     .get("SerialNumber")
                     .and_then(Value::as_string)
                     .ok_or(ProtocolError::InvalidPlistEntryForKey("SerialNumber"))?
                     .to_owned();
-                Ok(DeviceProperties {
+                Ok(DeviceAttachedInfo {
                     connection_type,
                     device_id,
                     location_id,
-                    product_id,
-                    serial_number,
+                    product_type,
+                    identifier,
                 })
             }
             _ => Err(ProtocolError::InvalidPlistEntry),
@@ -283,7 +325,56 @@ impl TryFrom<&Value> for DeviceProperties {
     }
 }
 #[derive(Debug)]
-pub struct ResultMessage(i64);
+/// Event that can occur on device listener
+pub enum DeviceEvent {
+    /// Device was plugged into host
+    Attached(DeviceAttachedInfo),
+    /// Device was unplugged from host
+    Detached(DeviceId),
+    /// Device was paired to host (trusting computer was authorized)
+    Paired(DeviceId),
+}
+impl TryFrom<&Value> for DeviceEvent {
+    type Error = ProtocolError;
+    fn try_from(value: &Value) -> Result<Self> {
+        match value {
+            Value::Dictionary(d) => {
+                let msg_type = MessageType::try_from(d.get(USB_MESSAGE_TYPE_KEY).unwrap())?;
+                let device_id = d
+                    .get(USB_DEVICE_ID_KEY)
+                    .and_then(Value::as_unsigned_integer)
+                    .ok_or(ProtocolError::InvalidPlistEntryForKey(USB_DEVICE_ID_KEY))?;
+                match msg_type {
+                    MessageType::Attached => {
+                        let device_info = d
+                            .get(USB_DEVICE_PROPERTIES_KEY)
+                            .and_then(|p| DeviceAttachedInfo::try_from(p).ok())
+                            .ok_or(ProtocolError::InvalidPlistEntryForKey(
+                                USB_DEVICE_PROPERTIES_KEY,
+                            ))?;
+                        Ok(DeviceEvent::Attached(device_info))
+                    }
+                    MessageType::Detached => Ok(DeviceEvent::Detached(device_id)),
+                    MessageType::Paired => Ok(DeviceEvent::Paired(device_id)),
+                    MessageType::Result => {
+                        Err(ProtocolError::InvalidMessageType("Result".to_owned()))
+                    }
+                }
+            }
+            _ => Err(ProtocolError::InvalidPlistEntry),
+        }
+    }
+}
+impl DeviceEvent {
+    pub(crate) fn from_vec(data: Vec<u8>) -> Result<DeviceEvent> {
+        let cursor = std::io::Cursor::new(&data[..]);
+        let dict: Value = Value::from_reader(cursor).unwrap();
+        DeviceEvent::try_from(&dict)
+    }
+}
+
+#[derive(Debug)]
+pub struct ResultMessage(pub i64);
 impl ResultMessage {
     pub fn from_reader<R: Read + Seek>(reader: R) -> Result<Self> {
         let r: plist::Value = plist::Value::from_reader(reader).unwrap();
@@ -300,42 +391,6 @@ impl TryFrom<&Value> for ResultMessage {
                     .and_then(Value::as_signed_integer)
                     .ok_or(ProtocolError::InvalidPlistEntryForKey("SerialNumber"))?;
                 Ok(ResultMessage(num))
-            }
-            _ => Err(ProtocolError::InvalidPlistEntry),
-        }
-    }
-}
-#[derive(Debug)]
-pub struct DeviceEventMessage {
-    pub message_type: MessageType,
-    pub device_id: u64,
-    pub device_properties: Option<DeviceProperties>,
-}
-
-impl DeviceEventMessage {
-    pub fn from_reader<R: Read + Seek>(reader: R) -> Result<Self> {
-        let r: plist::Value = plist::Value::from_reader(reader).unwrap();
-        DeviceEventMessage::try_from(&r)
-    }
-}
-impl TryFrom<&Value> for DeviceEventMessage {
-    type Error = ProtocolError;
-    fn try_from(value: &Value) -> Result<Self> {
-        match value {
-            Value::Dictionary(d) => {
-                let msg_type = MessageType::try_from(d.get("MessageType").unwrap())?;
-                let device_id = d
-                    .get("DeviceID")
-                    .and_then(|int| int.as_unsigned_integer())
-                    .ok_or(ProtocolError::InvalidPlistEntryForKey("DeviceID"))?;
-                let device_properties = d
-                    .get("Properties")
-                    .and_then(|p| DeviceProperties::try_from(p).ok());
-                Ok(DeviceEventMessage {
-                    message_type: msg_type,
-                    device_id,
-                    device_properties,
-                })
             }
             _ => Err(ProtocolError::InvalidPlistEntry),
         }
@@ -374,20 +429,15 @@ mod tests {
     #[test]
     fn it_decodes_plists() {
         let r = value_for_testfile("detached.plist");
-        let msg = DeviceEventMessage::try_from(&r);
-        assert!(msg.is_ok());
-        let msg = msg.unwrap();
-        assert_eq!(msg.device_id, 3);
-        assert_eq!(msg.message_type, MessageType::Detached);
-        println!("Test: {:?}", msg);
+        match DeviceEvent::try_from(&r) {
+            Ok(DeviceEvent::Detached(device_id)) => assert_eq!(device_id, 3),
+            _ => assert!(false, "Invalid DeviceEvent"),
+        }
         let r = value_for_testfile("paired.plist");
-        let msg = DeviceEventMessage::try_from(&r);
-        assert!(msg.is_ok());
-        let msg = msg.unwrap();
-        assert_eq!(msg.device_id, 3);
-        assert_eq!(msg.message_type, MessageType::Paired);
-        println!("Test: {:?}", msg);
-
+        match DeviceEvent::try_from(&r) {
+            Ok(DeviceEvent::Paired(device_id)) => assert_eq!(device_id, 3),
+            _ => assert!(false, "Invalid DeviceEvent"),
+        }
         let r = value_for_testfile("success-result.plist");
         let msg = ResultMessage::try_from(&r);
         assert!(msg.is_ok());
@@ -396,18 +446,18 @@ mod tests {
     #[test]
     fn it_decodes_attached() {
         let r = value_for_testfile("attached.plist");
-        let msg = DeviceEventMessage::try_from(&r);
+        let msg = DeviceEvent::try_from(&r);
         assert!(msg.is_ok());
-        let msg = msg.unwrap();
-        assert!(msg.device_properties.is_some());
-        assert_eq!(msg.message_type, MessageType::Attached);
-        assert_eq!(msg.device_id, 3);
-        let props = msg.device_properties.unwrap();
-        assert_eq!(props.connection_type, "USB");
-        assert_eq!(props.device_id, 3);
-        assert_eq!(props.location_id, 0);
-        assert_eq!(props.product_id, 4779);
-        assert_eq!(props.serial_number, "00001011-000A111E0111001E");
+        match DeviceEvent::try_from(&r) {
+            Ok(DeviceEvent::Attached(device_info)) => {
+                assert_eq!(device_info.device_id, 3);
+                assert_eq!(device_info.connection_type, DeviceConnectionType::USB);
+                assert_eq!(device_info.location_id, 0);
+                assert_eq!(device_info.product_type, ProductType::IPad);
+                assert_eq!(device_info.identifier, "00001011-000A111E0111001E");
+            }
+            _ => assert!(false, "Invalid DeviceEvent"),
+        }
     }
 
     #[test]

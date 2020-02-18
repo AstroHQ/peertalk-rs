@@ -7,8 +7,8 @@ Based on [PeerTalk by Rasmus Andersson](https://github.com/rsms/peertalk)
 ## Status
 
 - [x] Basic device listen protocol work started
+- [x] macOS/linux UNIX domain socket support
 
 ## TODO
 
-- [ ] macOS/linux UNIX domain socket support
 - [ ] Connect (network sockets) support
