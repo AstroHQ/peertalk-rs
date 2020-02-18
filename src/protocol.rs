@@ -1,6 +1,6 @@
 // use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use plist::Value;
-// use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
@@ -27,57 +27,6 @@ impl Error for ProtocolError {
     // fn source(&self) -> Option<&(dyn Error + 'static)> { }
 }
 
-/*
-Attach:
-<plist version="1.0">
-<dict>
-        <key>DeviceID</key>
-        <integer>3</integer>
-        <key>MessageType</key>
-        <string>Attached</string>
-        <key>Properties</key>
-        <dict>
-                <key>ConnectionType</key>
-                <string>USB</string>
-                <key>DeviceID</key>
-                <integer>3</integer>
-                <key>LocationID</key>
-                <integer>0</integer>
-                <key>ProductID</key>
-                <integer>4779</integer>
-                <key>SerialNumber</key>
-                <string>00008027-000C486C0222002E</string>
-        </dict>
-</dict>
-</plist>
-Detach:
-<plist version="1.0">
-<dict>
-        <key>DeviceID</key>
-        <integer>1</integer>
-        <key>MessageType</key>
-        <string>Detached</string>
-</dict>
-</plist>
-Paired:
-<plist version="1.0">
-<dict>
-        <key>DeviceID</key>
-        <integer>1</integer>
-        <key>MessageType</key>
-        <string>Paired</string>
-</dict>
-</plist>
-Result:
-<plist version="1.0">
-<dict>
-        <key>MessageType</key>
-        <string>Result</string>
-        <key>Number</key>
-        <integer>0</integer>
-</dict>
-</plist>
-*/
 #[derive(Debug)]
 pub enum MessageType {
     Paired,
@@ -220,6 +169,26 @@ impl TryFrom<&Value> for DeviceEventMessage {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Command {
+    #[serde(rename = "MessageType")]
+    message_type: String,
+    #[serde(rename = "ProgName")]
+    prog_name: String,
+    #[serde(rename = "ClientVersionString")]
+    client_version_string: String,
+    // args: HashMap<String, String>,
+}
+impl Command {
+    pub fn new<C: AsRef<str>>(command: C) -> Self {
+        Command {
+            message_type: command.as_ref().to_owned(),
+            prog_name: String::from("MyApp"),
+            client_version_string: String::from("1.0"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,5 +197,11 @@ mod tests {
         let r: plist::Value = plist::Value::from_file("test.plist").unwrap();
         let msg = DeviceEventMessage::try_from(&r).unwrap();
         println!("Test: {:?}", msg);
+    }
+
+    #[test]
+    fn it_encodes_command() {
+        // let command = Command::new("Listen");
+        // plist::to_file_xml("test.plist", &command).unwrap();
     }
 }

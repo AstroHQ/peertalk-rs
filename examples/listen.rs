@@ -1,6 +1,6 @@
-use usbmux::DeviceListener;
+use peertalk::DeviceListener;
 
 fn main() {
-    let listener = DeviceListener::new();
+    let _listener = DeviceListener::new();
     println!("Listening for iOS devices...");
 }

@@ -1,5 +1,7 @@
+//! Crate to handle establishing network connections over USB to apple devices
+#![forbid(missing_docs)]
+
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use std::io::{Read, Write};
@@ -8,10 +10,14 @@ use std::net::TcpStream;
 
 mod protocol;
 
+/// Error type for any errors with talking to USB muxer/device support
 #[derive(Debug)]
 pub enum Error {
+    /// Invalid packet type value
     InvalidPacketType(u32),
+    /// Invalid protocol value (expect 0 or 1)
     InvalidProtocol(u32),
+    /// Invalid reply code (expect 0-6 except 4, 5)
     InvalidReplyCode(u32),
 }
 impl fmt::Display for Error {
@@ -27,6 +33,7 @@ impl std::error::Error for Error {
     // fn source(&self) -> Option<&(dyn Error + 'static)> { }
 }
 
+/// Result type
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 const BASE_PACKET_SIZE: u32 = size_of::<u32>() as u32 * 4;
@@ -188,31 +195,15 @@ impl Packet {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct Command {
-    #[serde(rename = "MessageType")]
-    message_type: String,
-    #[serde(rename = "ProgName")]
-    prog_name: String,
-    #[serde(rename = "ClientVersionString")]
-    client_version_string: String,
-    // args: HashMap<String, String>,
-}
-impl Command {
-    fn new<C: AsRef<str>>(command: C) -> Self {
-        Command {
-            message_type: command.as_ref().to_owned(),
-            prog_name: String::from("MyApp"),
-            client_version_string: String::from("1.0"),
-        }
-    }
-}
+/// Listens for iOS devices connecting over USB via Apple Mobile Support/usbmuxd
 pub struct DeviceListener {
     socket: TcpStream,
 }
 impl DeviceListener {
+    /// Produces a new device listener, registering with usbmuxd/apple mobile support service
     pub fn new() -> Self {
         use std::net::SocketAddr;
+        // TODO: branch here for macOS vs windows, using unix socket on macOS/linux
         let addr: SocketAddr = "127.0.0.1:27015".parse().unwrap();
         let socket = TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(5))
             .expect("Failed to connect to USB mux service");
@@ -221,7 +212,7 @@ impl DeviceListener {
         listener
     }
     fn start_listen(&mut self) {
-        let command = Command::new("Listen");
+        let command = protocol::Command::new("Listen");
         let mut payload: Vec<u8> = Vec::new();
         plist::to_writer_xml(&mut payload, &command).unwrap();
         assert_ne!(payload.len(), 0, "Should have > 0 bytes payload");
@@ -250,26 +241,5 @@ impl DeviceListener {
     fn send_payload(&mut self, packet_type: PacketType, protocol: Protocol, payload: Vec<u8>) {
         let packet = Packet::new(protocol, packet_type, 0, payload);
         packet.write_into(&mut self.socket).unwrap();
-    }
-}
-/*
-// Shared dictionary
-MessageType => command,
-ProgName => app bundle name,
-ClientVersionString => bundle version,
-// payload args below
-
-// Listen
-MessageType => Listen,
-
-*/
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn it_works() {
-        let command = Command::new("Listen");
-        plist::to_file_xml("test.plist", &command).unwrap();
     }
 }
