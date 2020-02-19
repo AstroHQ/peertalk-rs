@@ -59,7 +59,7 @@ fn process_frame(frame: PTFrame) {
         let info: plist::Value = plist::Value::from_reader(reader).unwrap();
         println!("Got device info: {:?}", info);
     } else if frame.frame_type == PT_FRAME_TYPE_TEXT_MSG {
-        if let Ok(string) = std::str::from_utf8(&frame.payload[..]) {
+        if let Ok(string) = std::str::from_utf8(&frame.payload[4..]) {
             println!("Got text payload: {}", string);
         } else {
             println!("Failed to read payload of {} bytes", frame.payload.len());

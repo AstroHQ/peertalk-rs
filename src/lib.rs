@@ -133,6 +133,10 @@ pub struct DeviceListener {
 }
 impl DeviceListener {
     /// Produces a new device listener, registering with usbmuxd/apple mobile support service
+    ///
+    /// # Errors
+    /// Can produce an error, most commonly when the mobile service isn't available. It should be available on macOS,
+    /// but on Windows it's only available if Apple Mobile Support is installed, typically via iTunes.
     pub fn new() -> Result<Self> {
         #[cfg(target_os = "windows")]
         let socket = connect_windows()?;
@@ -146,7 +150,7 @@ impl DeviceListener {
         listener.socket.set_nonblocking(true)?;
         Ok(listener)
     }
-    /// Receives an event, blocking until there is
+    /// Receives an event, None if there's no pending events at this time
     pub fn next_event(&mut self) -> Option<DeviceEvent> {
         self.drain_events();
         self.events.pop_front()
