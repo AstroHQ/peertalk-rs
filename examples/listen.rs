@@ -4,7 +4,9 @@ fn main() {
     let mut listener = DeviceListener::new().expect("Failed to create device listener");
     println!("Listening for iOS devices...");
     loop {
-        let event = listener.recv_event().unwrap();
-        println!("Event: {:?}", event);
+        match listener.next_event() {
+            Some(event) => println!("Event: {:?}", event),
+            None => std::thread::sleep(std::time::Duration::from_secs(5)),
+        }
     }
 }

@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
-use std::io::{Read, Seek, Write};
+use std::io::{Error as IoError, Read, Seek, Write};
 use std::mem::size_of;
+
 /// Error type for any errors with talking to USB muxer/device support
 #[derive(Debug)]
 pub enum ProtocolError {
@@ -22,6 +23,8 @@ pub enum ProtocolError {
     InvalidProtocol(u32),
     /// Invalid reply code (expect 0-6 except 4, 5)
     InvalidReplyCode(u32),
+    /// An IO error occurred, usually if reading from file/socket
+    IoError(IoError),
 }
 impl fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -34,11 +37,22 @@ impl fmt::Display for ProtocolError {
             ProtocolError::InvalidPacketType(code) => write!(f, "Invalid Packet Type: {}", code),
             ProtocolError::InvalidProtocol(code) => write!(f, "Invalid Protocol: {}", code),
             ProtocolError::InvalidReplyCode(code) => write!(f, "Invalid Reply code: {}", code),
+            ProtocolError::IoError(e) => write!(f, "IoError: {}", e),
         }
     }
 }
 impl Error for ProtocolError {
-    // fn source(&self) -> Option<&(dyn Error + 'static)> { }
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ProtocolError::IoError(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+impl From<IoError> for ProtocolError {
+    fn from(error: IoError) -> Self {
+        ProtocolError::IoError(error)
+    }
 }
 
 /// Result type
@@ -185,14 +199,14 @@ impl Packet {
     where
         R: Read,
     {
-        let size = reader.read_u32::<LittleEndian>().unwrap();
-        let protocol = Protocol::try_from(reader.read_u32::<LittleEndian>().unwrap())?;
-        let packet_type = PacketType::try_from(reader.read_u32::<LittleEndian>().unwrap())?;
-        let tag = reader.read_u32::<LittleEndian>().unwrap();
+        let size = reader.read_u32::<LittleEndian>()?;
+        let protocol = Protocol::try_from(reader.read_u32::<LittleEndian>()?)?;
+        let packet_type = PacketType::try_from(reader.read_u32::<LittleEndian>()?)?;
+        let tag = reader.read_u32::<LittleEndian>()?;
         let payload_size = size - BASE_PACKET_SIZE; // get what's left
         let data = if payload_size > 0 {
             let mut payload = vec![0; payload_size as usize];
-            reader.read_exact(&mut payload).unwrap();
+            reader.read_exact(&mut payload)?;
             payload
         } else {
             vec![]
@@ -405,15 +419,35 @@ pub struct Command {
     prog_name: String,
     #[serde(rename = "ClientVersionString")]
     client_version_string: String,
-    // args: HashMap<String, String>,
+    #[serde(rename = "PortNumber")]
+    port_number: Option<u16>,
+    #[serde(rename = "DeviceID")]
+    device_id: Option<DeviceId>,
 }
 impl Command {
-    pub fn new<C: AsRef<str>>(command: C) -> Self {
+    fn new<C: AsRef<str>>(command: C) -> Self {
         Command {
             message_type: command.as_ref().to_owned(),
-            prog_name: String::from("MyApp"),
-            client_version_string: String::from("1.0"),
+            prog_name: String::from("Peertalk Example"),
+            client_version_string: String::from("1"),
+            port_number: None,
+            device_id: None,
         }
+    }
+    pub fn listen() -> Self {
+        Command::new("Listen")
+    }
+    pub fn connect(port: u16, device_id: DeviceId) -> Self {
+        let mut command = Command::new("Connect");
+        command.port_number = Some(port.to_be()); // apple's service expects network byte order
+        command.device_id = Some(device_id);
+        command
+    }
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut payload: Vec<u8> = Vec::new();
+        plist::to_writer_xml(&mut payload, &self).unwrap();
+        assert_ne!(payload.len(), 0, "Should have > 0 bytes payload");
+        payload
     }
 }
 
@@ -466,5 +500,12 @@ mod tests {
         assert_eq!(command.message_type, "Listen");
         assert_eq!(command.prog_name, "MyApp");
         assert_eq!(command.client_version_string, "1.0");
+    }
+    #[test]
+    fn it_encodes_command() {
+        let mut command = Command::new("Connect");
+        command.port_number = Some(12345);
+        command.device_id = Some(16689);
+        plist::to_file_xml("test.plist", &command).unwrap();
     }
 }
