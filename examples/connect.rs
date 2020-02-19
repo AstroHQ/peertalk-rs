@@ -1,9 +1,10 @@
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use peertalk::connect_to_device;
+use peertalk::{connect_to_device, DeviceEvent, DeviceId, DeviceListener};
 use std::error::Error;
 use std::fmt;
 use std::io::{Error as IoError, Read, Write};
 
+const PT_PORT: u16 = 2345;
 const PT_VERSION: u32 = 1;
 const PT_FRAME_TYPE_DEVICE_INFO: u32 = 100;
 const PT_FRAME_TYPE_TEXT_MSG: u32 = 101;
@@ -11,7 +12,34 @@ const PT_FRAME_TYPE_PING: u32 = 102;
 const PT_FRAME_TYPE_PONG: u32 = 103;
 
 fn main() {
-    let mut socket = connect_to_device(3, 2345).expect("Failed to create device connection");
+    let mut listener =
+        DeviceListener::new().expect("Failed to create device listener, no Apple Mobile Support?");
+    loop {
+        match listener.next_event() {
+            Some(event) => process_event(event),
+            None => std::thread::sleep(std::time::Duration::from_secs(5)),
+        }
+    }
+}
+fn process_event(event: DeviceEvent) {
+    println!("Event: {:?}", event);
+    match event {
+        DeviceEvent::Attached(info) => {
+            println!("Device attached: {:?}", info);
+            println!("Attempting to connect...");
+            start_example(info.device_id, PT_PORT);
+        }
+        DeviceEvent::Detached(device_id) => {
+            println!("Device {} detached", device_id);
+        }
+        DeviceEvent::Paired(device_id) => {
+            println!("Device {} was paired", device_id);
+        }
+    }
+}
+fn start_example(device_id: DeviceId, port: u16) {
+    let mut socket =
+        connect_to_device(device_id, port).expect("Failed to create device connection");
     // say hi
     let hi = PTFrame::text("Hello from Rust!");
     hi.write_into(&mut socket).unwrap();
@@ -22,7 +50,6 @@ fn main() {
             Err(e) => println!("Error reading frame: {}", e),
         }
     }
-    // std::thread::sleep(std::time::Duration::from_secs(5));
 }
 fn process_frame(frame: PTFrame) {
     // print out text if it's device info or text msg type

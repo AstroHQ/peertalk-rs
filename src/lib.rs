@@ -13,7 +13,9 @@ use std::os::unix::net::UnixStream;
 const WINDOWS_TCP_PORT: u16 = 27015;
 
 mod protocol;
-pub use protocol::{DeviceAttachedInfo, DeviceConnectionType, DeviceEvent, ProtocolError};
+pub use protocol::{
+    DeviceAttachedInfo, DeviceConnectionType, DeviceEvent, DeviceId, ProtocolError,
+};
 use protocol::{Packet, PacketType, Protocol};
 
 /// Error for device listener etc
@@ -81,7 +83,7 @@ fn connect_unix() -> Result<UsbSocket> {
 /// Connect's to Apple Mobile Support service on Windows if available (TCP 27015)
 #[cfg(target_os = "windows")]
 fn connect_windows() -> Result<UsbSocket> {
-    use std::net::{Ipv4Addr, SocketAddr};
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), WINDOWS_TCP_PORT);
     Ok(TcpStream::connect_timeout(
         &addr,
