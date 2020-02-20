@@ -1,7 +1,7 @@
 use peertalk::DeviceListener;
 
 fn main() {
-    let mut listener = DeviceListener::new().expect("Failed to create device listener");
+    let listener = DeviceListener::new().expect("Failed to create device listener");
     println!("Listening for iOS devices...");
     loop {
         match listener.next_event() {

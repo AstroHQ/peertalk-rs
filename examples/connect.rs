@@ -12,7 +12,7 @@ const PT_FRAME_TYPE_PING: u32 = 102;
 const PT_FRAME_TYPE_PONG: u32 = 103;
 
 fn main() {
-    let mut listener =
+    let listener =
         DeviceListener::new().expect("Failed to create device listener, no Apple Mobile Support?");
     loop {
         match listener.next_event() {
