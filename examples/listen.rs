@@ -1,11 +1,16 @@
 use peertalk::DeviceListener;
+#[macro_use]
+extern crate log;
 
 fn main() {
+    pretty_env_logger::formatted_builder()
+        .filter(None, log::LevelFilter::Trace)
+        .init();
     let listener = DeviceListener::new().expect("Failed to create device listener");
-    println!("Listening for iOS devices...");
+    info!("Listening for iOS devices...");
     loop {
         match listener.next_event() {
-            Some(event) => println!("Event: {:?}", event),
+            Some(event) => info!("Event: {:?}", event),
             None => std::thread::sleep(std::time::Duration::from_secs(5)),
         }
     }

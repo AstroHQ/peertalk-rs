@@ -1,6 +1,10 @@
 //! Crate to handle establishing network connections over USB to apple devices
 #![forbid(missing_docs)]
 use std::cell::RefCell;
+
+#[macro_use]
+extern crate log;
+
 use std::collections::VecDeque;
 use std::error::Error as StdError;
 use std::fmt;
@@ -168,12 +172,12 @@ impl DeviceListener {
                         break;
                     }
                     _ => {
-                        println!("IO Error: {}", e);
+                        error!("IO Error: {}", e);
                         break;
                     }
                 },
                 Err(e) => {
-                    println!("Error receiving events: {}", e);
+                    error!("Error receiving events: {}", e);
                     break;
                 }
             }

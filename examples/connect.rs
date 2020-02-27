@@ -3,6 +3,8 @@ use peertalk::{connect_to_device, DeviceEvent, DeviceId, DeviceListener};
 use std::error::Error;
 use std::fmt;
 use std::io::{Error as IoError, Read, Write};
+#[macro_use]
+extern crate log;
 
 const PT_PORT: u16 = 2345;
 const PT_VERSION: u32 = 1;
@@ -12,6 +14,9 @@ const PT_FRAME_TYPE_PING: u32 = 102;
 const PT_FRAME_TYPE_PONG: u32 = 103;
 
 fn main() {
+    pretty_env_logger::formatted_builder()
+        .filter(None, log::LevelFilter::Trace)
+        .init();
     let listener =
         DeviceListener::new().expect("Failed to create device listener, no Apple Mobile Support?");
     loop {
@@ -22,18 +27,18 @@ fn main() {
     }
 }
 fn process_event(event: DeviceEvent) {
-    println!("Event: {:?}", event);
+    debug!("Event: {:?}", event);
     match event {
         DeviceEvent::Attached(info) => {
-            println!("Device attached: {:?}", info);
-            println!("Attempting to connect...");
+            info!("Device attached: {:?}", info);
+            info!("Attempting to connect...");
             start_example(info.device_id, PT_PORT);
         }
         DeviceEvent::Detached(device_id) => {
-            println!("Device {} detached", device_id);
+            info!("Device {} detached", device_id);
         }
         DeviceEvent::Paired(device_id) => {
-            println!("Device {} was paired", device_id);
+            info!("Device {} was paired", device_id);
         }
     }
 }
@@ -47,7 +52,7 @@ fn start_example(device_id: DeviceId, port: u16) {
         // wait for data from device
         match PTFrame::from_reader(&mut socket) {
             Ok(frame) => process_frame(frame),
-            Err(e) => println!("Error reading frame: {}", e),
+            Err(e) => error!("Error reading frame: {}", e),
         }
     }
 }
@@ -57,17 +62,17 @@ fn process_frame(frame: PTFrame) {
         // binary plist?
         let reader = std::io::Cursor::new(frame.payload);
         let info: plist::Value = plist::Value::from_reader(reader).unwrap();
-        println!("Got device info: {:?}", info);
+        info!("Got device info: {:?}", info);
     } else if frame.frame_type == PT_FRAME_TYPE_TEXT_MSG {
         if let Ok(string) = std::str::from_utf8(&frame.payload[4..]) {
-            println!("Got text payload: {}", string);
+            info!("Got text payload: {}", string);
         } else {
-            println!("Failed to read payload of {} bytes", frame.payload.len());
+            error!("Failed to read payload of {} bytes", frame.payload.len());
         }
     } else if frame.frame_type == PT_FRAME_TYPE_PING {
-        println!("Ping!");
+        info!("Ping!");
     } else if frame.frame_type == PT_FRAME_TYPE_PONG {
-        println!("Pong!");
+        info!("Pong!");
     }
 }
 // peertalk frame example protocol
