@@ -161,8 +161,33 @@ impl DeviceListener {
         self.events.borrow_mut().pop_front()
     }
     fn drain_events(&self) {
+        // TODO: better way read on demand? maybe just thread it?
+        use std::io::Read;
+        let mut retries_left = 5;
+        let mut data: Vec<u8> = Vec::with_capacity(10_000);
+        let full_data = loop {
+            let mut buf = [0; 4096];
+            match (*self.socket.borrow_mut()).read(&mut buf) {
+                Ok(bytes) => {
+                    data.extend_from_slice(&buf[0..bytes]);
+                }
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::WouldBlock {
+                        retries_left -= 1;
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                }
+            }
+            if retries_left == 0 {
+                break data;
+            }
+        };
+        let mut cursor = std::io::Cursor::new(&full_data[..]);
         loop {
-            match Packet::from_reader(&mut *self.socket.borrow_mut()) {
+            if cursor.position() == full_data.len() as u64 {
+                break;
+            }
+            match Packet::from_reader(&mut cursor) {
                 Ok(packet) => {
                     let msg = DeviceEvent::from_vec(packet.data).unwrap();
                     self.events.borrow_mut().push_back(msg);
@@ -184,6 +209,7 @@ impl DeviceListener {
         }
     }
     fn start_listen(&self) -> Result<()> {
+        info!("Starting device listen");
         let command = protocol::Command::listen();
         let payload = command.to_bytes();
         send_payload(
@@ -196,8 +222,10 @@ impl DeviceListener {
         let cursor = std::io::Cursor::new(&packet.data[..]);
         let res = protocol::ResultMessage::from_reader(cursor)?;
         if res.0 != 0 {
+            error!("Failed to setup device listen: {}", res.0);
             return Err(Error::FailedToListen(res.0));
         }
+        info!("Listen successful");
         Ok(())
     }
 }
