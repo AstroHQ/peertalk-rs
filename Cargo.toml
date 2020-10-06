@@ -1,10 +1,13 @@
 [package]
 name = "peertalk"
 version = "0.1.0"
-authors = ["Jeremy Knope <jeremy@astro-hq.com>"]
+authors = ["Jeremy Knope <jeremy@astropad.com>"]
+description = "Library for communicating with an iPad or iPhone over USB"
+keywords = ["ios", "iphone", "ipad", "peertalk", "usb"]
+categories = ["network-programming"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT OR Apache-2.0"
+readme = "README.md"
 
 [dependencies]
 plist = "0.5"
