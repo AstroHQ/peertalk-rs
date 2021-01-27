@@ -8,6 +8,7 @@ categories = ["network-programming"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
+repository = "https://github.com/AstroHQ/peertalk-rs"
 
 [dependencies]
 plist = "0.5"
