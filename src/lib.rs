@@ -6,8 +6,6 @@ use std::cell::RefCell;
 extern crate log;
 
 use std::collections::VecDeque;
-use std::error::Error as StdError;
-use std::fmt;
 #[cfg(target_os = "windows")]
 use std::net::TcpStream;
 #[cfg(not(target_os = "windows"))]
@@ -23,50 +21,20 @@ pub use protocol::{
 use protocol::{Packet, PacketType, Protocol};
 
 /// Error for device listener etc
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
     /// Error with usbmuxd protocol
-    ProtocolError(protocol::ProtocolError),
+    #[error("protocol error: {0}")]
+    ProtocolError(#[from] protocol::ProtocolError),
     /// usbmuxd or Apple Mobile Service isn't available or installed
-    ServiceUnavailable(std::io::Error),
+    #[error("Apple Mobile Device service (usbmuxd) likely not available: {0}")]
+    ServiceUnavailable(#[from] std::io::Error),
     /// Error when registrering for device events failed
+    #[error("error registering device listener: code {0}")]
     FailedToListen(i64),
     /// Error establishing network connection to device
+    #[error("error connecting to device: {0}")]
     ConnectionRefused(i64),
-}
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::ProtocolError(e) => write!(f, "Protocol error: {}", e),
-            Error::ServiceUnavailable(e) => write!(
-                f,
-                "Apple Mobile Device service (usbmuxd) likely not available: {}",
-                e
-            ),
-            Error::FailedToListen(c) => write!(f, "Error registering device listener: code {}", c),
-            Error::ConnectionRefused(c) => write!(f, "Error connecting to device: {}", c),
-        }
-    }
-}
-impl StdError for Error {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match self {
-            Error::ProtocolError(e) => Some(e),
-            Error::ServiceUnavailable(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error::ServiceUnavailable(e)
-    }
-}
-impl From<protocol::ProtocolError> for Error {
-    fn from(e: protocol::ProtocolError) -> Self {
-        Error::ProtocolError(e)
-    }
 }
 
 /// Alias for any of this crate's results

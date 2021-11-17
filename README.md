@@ -18,7 +18,3 @@ This just provides the necessary code for the host (mac/windows) side to detect 
 - [x] Basic device listen protocol work started
 - [x] macOS/linux UNIX domain socket support
 - [x] Connect (network sockets) support
-
-## TODO
-
-- [ ] Improved error handling (`thiserror`)
