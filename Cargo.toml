@@ -1,6 +1,6 @@
 [package]
 name = "peertalk"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Jeremy Knope <jeremy@astropad.com>"]
 description = "Library for communicating with an iPad or iPhone over USB"
 keywords = ["ios", "iphone", "ipad", "peertalk", "usb"]
