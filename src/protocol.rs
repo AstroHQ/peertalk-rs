@@ -54,9 +54,10 @@ pub enum PacketType {
     // 7 unknown
     PlistPayload = 8,
 }
-impl Into<u32> for PacketType {
-    fn into(self) -> u32 {
-        self as u32
+
+impl From<PacketType> for u32 {
+    fn from(p_type: PacketType) -> Self {
+        p_type as Self
     }
 }
 
@@ -80,11 +81,13 @@ pub enum Protocol {
     Binary = 0,
     Plist = 1,
 }
-impl Into<u32> for Protocol {
-    fn into(self) -> u32 {
-        self as u32
+
+impl From<Protocol> for u32 {
+    fn from(protocol: Protocol) -> Self {
+        protocol as Self
     }
 }
+
 impl TryFrom<u32> for Protocol {
     type Error = ProtocolError;
     fn try_from(value: u32) -> Result<Self> {
@@ -107,11 +110,13 @@ pub enum ReplyCode {
     // 5 unknown
     BadVersion = 6,
 }
-impl Into<u32> for ReplyCode {
-    fn into(self) -> u32 {
-        self as u32
+
+impl From<ReplyCode> for u32 {
+    fn from(code: ReplyCode) -> Self {
+        code as Self
     }
 }
+
 impl TryFrom<u32> for ReplyCode {
     type Error = ProtocolError;
     fn try_from(value: u32) -> Result<Self> {
@@ -298,7 +303,7 @@ impl TryFrom<&Value> for DeviceAttachedInfo {
                 let product_type = d
                     .get("ProductID")
                     .and_then(Value::as_unsigned_integer)
-                    .and_then(|i| Some(ProductType::from(i as u16))) // product_id is USB product_id which is u16
+                    .map(|i| ProductType::from(i as u16)) // product_id is USB product_id which is u16
                     .ok_or(ProtocolError::InvalidPlistEntryForKey("ProductID"))?;
                 let identifier = d
                     .get("SerialNumber")
