@@ -3,56 +3,35 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use plist::Value;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use std::error::Error;
 use std::fmt;
 use std::io::{Error as IoError, Read, Seek, Write};
 use std::mem::size_of;
+use thiserror::Error;
 
 /// Error type for any errors with talking to USB muxer/device support
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ProtocolError {
     /// Message type is invalid, or unsupported
+    #[error("invalid message type: {0}")]
     InvalidMessageType(String),
     /// Plist entry isn't the type expected
+    #[error("invalid plist format/entry")]
     InvalidPlistEntry,
     /// Plist entry for key is invalid/wrong type
+    #[error("invalid plist entry for key: {0}")]
     InvalidPlistEntryForKey(&'static str),
     /// Invalid packet type value
+    #[error("invalid packet type: {0}")]
     InvalidPacketType(u32),
     /// Invalid protocol value (expect 0 or 1)
+    #[error("invalid protocol: {0}")]
     InvalidProtocol(u32),
     /// Invalid reply code (expect 0-6 except 4, 5)
+    #[error("invalid reply code: {0}")]
     InvalidReplyCode(u32),
     /// An IO error occurred, usually if reading from file/socket
-    IoError(IoError),
-}
-impl fmt::Display for ProtocolError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ProtocolError::InvalidMessageType(t) => write!(f, "Invalid message type: {}", t),
-            ProtocolError::InvalidPlistEntry => write!(f, "Invalid plist format/entry"),
-            ProtocolError::InvalidPlistEntryForKey(key) => {
-                write!(f, "Invalid plist entry for key: {}", key)
-            }
-            ProtocolError::InvalidPacketType(code) => write!(f, "Invalid Packet Type: {}", code),
-            ProtocolError::InvalidProtocol(code) => write!(f, "Invalid Protocol: {}", code),
-            ProtocolError::InvalidReplyCode(code) => write!(f, "Invalid Reply code: {}", code),
-            ProtocolError::IoError(e) => write!(f, "IoError: {}", e),
-        }
-    }
-}
-impl Error for ProtocolError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            ProtocolError::IoError(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-impl From<IoError> for ProtocolError {
-    fn from(error: IoError) -> Self {
-        ProtocolError::IoError(error)
-    }
+    #[error(transparent)]
+    IoError(#[from] IoError),
 }
 
 /// Result type
