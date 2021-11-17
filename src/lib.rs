@@ -18,7 +18,7 @@ const WINDOWS_TCP_PORT: u16 = 27015;
 
 mod protocol;
 pub use protocol::{
-    DeviceAttachedInfo, DeviceConnectionType, DeviceEvent, DeviceId, ProtocolError,
+    DeviceAttachedInfo, DeviceConnectionType, DeviceEvent, DeviceId, ProductType, ProtocolError,
 };
 use protocol::{Packet, PacketType, Protocol};
 
