@@ -1,0 +1,30 @@
+name: Cargo Build
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: ["macos-latest", "windows-latest", "ubuntu-latest"]
+    runs-on: '${{ matrix.os }}'
+    name: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Linux deps
+        run: sudo apt install -y libavahi-compat-libdnssd-dev libavahi-compat-libdnssd1
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: iOS Rust target
+        run: rustup target add aarch64-apple-ios
+      - name: Build
+        run: cargo build --all --all-features
+      - name: Build for iOS
+        run: cargo build --workspace --all-features --target aarch64-apple-ios
+        if: ${{ matrix.os == 'macos-latest' }}
+      - name: Run Clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
