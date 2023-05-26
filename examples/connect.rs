@@ -14,7 +14,7 @@ const PT_FRAME_TYPE_PING: u32 = 102;
 const PT_FRAME_TYPE_PONG: u32 = 103;
 
 fn main() {
-    pretty_env_logger::formatted_builder()
+    env_logger::builder()
         .filter(None, log::LevelFilter::Trace)
         .init();
     let listener =
