@@ -3,7 +3,7 @@ use peertalk::DeviceListener;
 extern crate log;
 
 fn main() {
-    pretty_env_logger::formatted_builder()
+    env_logger::builder()
         .filter(None, log::LevelFilter::Trace)
         .init();
     let listener = DeviceListener::new().expect("Failed to create device listener");

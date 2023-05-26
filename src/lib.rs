@@ -181,7 +181,7 @@ impl DeviceListener {
         let command = protocol::Command::listen();
         let payload = command.to_bytes();
         send_payload(
-            &mut *self.socket.borrow_mut(),
+            &mut self.socket.borrow_mut(),
             PacketType::PlistPayload,
             Protocol::Plist,
             payload,
